@@ -3,59 +3,52 @@ import System.Environment
 import System.Directory
 import System.IO
 
+type Message = String
+type Key = String
+type Filepath = String
+
+data Source = Message | Filepath
+
 prepareKey :: [Char] -> [Char] -> [Char]
 prepareKey msg key = take (length msg) (cycle key)
 
 convertString :: [Char] -> [Int]
-convertString [] = []
-convertString (x:xs) = ((\x -> if x < 50 then x + 128 else x) . ord $ x):(convertString xs)
-
-weaveArrays :: (Num a, Ord a) => (a -> a -> a) -> [a] -> [a] -> [a]
-weaveArrays _ _ [] = []
-weaveArrays _ [] _ = []
-weaveArrays f (x:xs) (y:ys) = (f x y):(weaveArrays f xs ys)
+convertString = map ((\x -> if x < 50 then x + 128 else x) . ord) 
 
 stringify :: [Int] -> [Char]
 stringify = concat . map show  
 
 unStringify :: [Char] -> [Int]
 unStringify [] = []
-unStringify (x:y:z:xs) = (read $ [x] ++ [y] ++ [z]):(unStringify xs)
+unStringify (x:y:z:xs) = (read [x, y, z]):(unStringify xs)
 
 encode :: [Char] -> [Char] -> [Char]
-encode msg trueKey = stringify $ weaveArrays (+) (convertString msg) (convertString trueKey)
+encode msg trueKey = stringify $ zipWith (+) (convertString msg) (convertString trueKey)
 
 decode :: [Char] -> [Char] -> [Char]
-decode msg trueKey = map (chr . \x -> if x > 127 then x - 128 else x) $ weaveArrays (-) (unStringify msg) (convertString trueKey)
+decode msg trueKey = map (chr . \x -> if x > 127 then x - 128 else x) $ zipWith (-) (unStringify msg) (convertString trueKey)
 
-process :: String -> Maybe ([String] -> IO())
+process :: String -> Maybe ((String, Key) -> IO())
 process "-e" = Just encrypt
 process "-ef" = Just encryptFile
 process "-d" = Just decrypt
 process "-df" = Just decryptFile
 process _ = Nothing
 
-encrypt :: [String] -> IO()
-encrypt [msg, key] = do
+encrypt :: (Message, Key) -> IO()
+encrypt (msg, key) = do
     let trueKey = prepareKey msg key
         cryptotext = encode msg trueKey
     print cryptotext
-encrypt [] = do
-    msg <- getLine
-    key <- getLine
-    let trueKey = prepareKey msg key
-        cryptotext = encode msg trueKey
-    print cryptotext
-encrypt _ = print "Incorrect pattern"
 
-decrypt :: [String] -> IO()
-decrypt [msg, key] = do
+decrypt :: (Message, Key) -> IO()
+decrypt (msg, key) = do
     let trueKey = prepareKey msg key
         normalText = decode msg trueKey
     print normalText 
     
-encryptFile :: [String] -> IO()
-encryptFile [path, key]  = do
+encryptFile :: (Filepath, Key) -> IO()
+encryptFile (path, key)  = do
     handle <- openFile path ReadMode
     (tempName, tempHandle) <- openTempFile "." "temp"
     contents <- hGetContents handle
@@ -67,8 +60,8 @@ encryptFile [path, key]  = do
     removeFile path
     renameFile tempName path
 
-decryptFile :: [String] -> IO()
-decryptFile [path, key] = do
+decryptFile :: (Filepath, Key) -> IO()
+decryptFile (path, key) = do
     contents <- readFile path
     (tempName, tempHandle) <- openTempFile "." "temp"
     let trueKey = prepareKey contents key
@@ -81,6 +74,7 @@ decryptFile [path, key] = do
 main = do
     (command:args) <- getArgs
     let action = process command
+        (source, key) = (args !! 0, args !! 1)
     case action of
-        Just a -> a args
+        Just a -> a (source, key)
         Nothing -> print "You did not enter a correct flag. Flags are -e, -ef, and -d"
