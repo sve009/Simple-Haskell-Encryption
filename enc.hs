@@ -7,8 +7,6 @@ type Message = String
 type Key = String
 type Filepath = String
 
-data Source = Message | Filepath
-
 prepareKey :: [Char] -> [Char] -> [Char]
 prepareKey msg key = take (length msg) (cycle key)
 
